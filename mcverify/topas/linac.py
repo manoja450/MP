@@ -92,6 +92,7 @@ def phase_space_source(w: ParamWriter, cfg: dict, src: SourceSpec, name: str = "
     plane = ps.get("plane_z_from_target_cm")
     w.s("Ge/PhspPlane/Parent", "IEC_G")
     w.s("Ge/PhspPlane/Type", "Group")
+    w.d("Ge/PhspPlane/RotZ", float(ps.get("rotate_z_deg", 0.0)), "deg")
     if src.z_stored:
         # z in the file is measured from the target; after inversion z_world = SAD - z
         w.comment("Z stored per particle: plane group sits at the target (z = SAD)")
@@ -118,6 +119,28 @@ def phase_space_source(w: ParamWriter, cfg: dict, src: SourceSpec, name: str = "
     for ax in ("X", "Y", "Z"):
         default = ax == "Z"
         w.b(f"{p}/PhaseSpaceInvert{ax}Axis", bool(ps.get(f"invert_{ax.lower()}_axis", default)))
+
+
+def phsp_to_iec(cfg: dict, x, y, z, u=0.0, v=0.0, w=1.0):
+    """Where a phase-space particle ends up in IEC_G coordinates (gantry 0).
+
+    Mirrors OpenTOPAS: the invert flags act on the file coordinates, then the
+    source component transform is applied as  world = T + Rz(RotZ)^-1 * local
+    (TsVGenerator::TransformPrimaryForComponent). Used for tests/documentation.
+    """
+    import numpy as np
+    ps = cfg["phase_space"]
+    p = np.array([x, y, z], float)
+    d = np.array([u, v, w], float)
+    for i, ax in enumerate("xyz"):
+        if ps.get(f"invert_{ax}_axis", ax == "z"):
+            p[i] *= -1
+            d[i] *= -1
+    th = np.radians(float(ps.get("rotate_z_deg", 0.0)))
+    rz = np.array([[np.cos(th), -np.sin(th), 0], [np.sin(th), np.cos(th), 0], [0, 0, 1]])
+    inv = rz.T
+    origin = np.array([0.0, 0.0, float(cfg["sad_cm"])])   # z-stored case: plane group at the target
+    return origin + inv @ p, inv @ d
 
 
 def _one_jaw(w: ParamWriter, cfg: dict, key: str, lo: float, hi: float) -> None:

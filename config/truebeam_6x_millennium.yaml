@@ -24,11 +24,16 @@ phase_space:
   limited_assume_first_particle_is_new_history: true
   include_empty_histories: false
   ignore_unsupported_particles: true
-  # IAEA files: +z points downstream (away from target). TOPAS IEC coordinates
-  # have +z pointing towards the source, so z is inverted.
+  # Coordinate mapping, from the TrueBeam header (Constantin et al. 2010):
+  #   origin at the target, +z towards the patient,
+  #   +x parallel to the UPPER-jaw motion and towards the gantry  => file x = IEC +Y
+  # so file (x, y, z) must become IEC (X, Y, Z) = (y, x, -z). In OpenTOPAS this is
+  # done by inverting y and z and rotating the source group by RotZ = -90 deg
+  # (checked numerically in tests/test_topas_generation.py::test_phsp_axis_mapping).
+  invert_x_axis: false
+  invert_y_axis: true
   invert_z_axis: true
-  invert_x_axis: false   # VERIFY with the asymmetric-jaw test field (docs/ROADMAP.md, Step 3)
-  invert_y_axis: false
+  rotate_z_deg: -90.0
 
 physics:
   modules: [g4em-standard_opt4]

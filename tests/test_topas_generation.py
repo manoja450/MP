@@ -126,3 +126,24 @@ def test_too_few_chunks_is_an_error(tmp_path):
     vcfg["jobs_per_field"] = 4
     with pytest.raises(ValueError):
         make_water_campaign(cfg, vcfg, [{"stem": "a", "histories": 1, "z_constant_cm": 26.7}] * 2, tmp_path)
+
+
+def test_phsp_axis_mapping():
+    """TrueBeam phsp: file x = IEC +Y, file y = IEC +X, file +z (downstream) -> towards isocentre."""
+    import numpy as np
+    from mcverify.topas.linac import phsp_to_iec
+    cfg = load_machine(MACHINE)
+    sad = cfg["sad_cm"]
+    p, d = phsp_to_iec(cfg, 1.0, 0.0, 27.0, u=0.1, v=0.0, w=0.995)
+    np.testing.assert_allclose(p, [0.0, 1.0, sad - 27.0], atol=1e-9)
+    np.testing.assert_allclose(d, [0.0, 0.1, -0.995], atol=1e-9)
+    p, d = phsp_to_iec(cfg, 0.0, 2.0, 20.0, u=0.0, v=0.2, w=0.98)
+    np.testing.assert_allclose(p, [2.0, 0.0, sad - 20.0], atol=1e-9)
+    np.testing.assert_allclose(d, [0.2, 0.0, -0.98], atol=1e-9)
+    # the mapping is a proper rotation (no mirror image)
+    e = [phsp_to_iec(cfg, *v)[0] - phsp_to_iec(cfg, 0, 0, 0)[0] for v in ((1, 0, 0), (0, 1, 0), (0, 0, 1))]
+    assert np.linalg.det(np.array(e)) == pytest.approx(1.0)
+    text = linac(cfg, FieldSetting.square(10), SourceSpec(stem="s", histories=1, z_stored=True)).text()
+    assert "d:Ge/PhspPlane/RotZ = -90. deg" in text
+    assert 'b:So/Linac/PhaseSpaceInvertYAxis = "True"' in text
+    assert "d:Ge/PhspPlane/TransZ = 100. cm" in text
