@@ -15,3 +15,6 @@ work/
 slurm-*.out
 # reference data may be licensed: commit only what you may share
 reference_data/*/
+
+# phase-space data kept inside the repo folder (never commit it)
+phsp/

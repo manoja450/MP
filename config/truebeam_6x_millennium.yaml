@@ -14,7 +14,7 @@ sad_cm: 100.0
 phase_space:
   # Directory containing phase-space CHUNKS made by scripts/split_phsp.py.
   # Every job uses a different chunk, so jobs are statistically independent.
-  chunk_dir: /scratch/YOUR_USER/phsp/TrueBeam_6X/chunks
+  chunk_dir: /home/manoja450/MP/MP_code/phsp/TrueBeam_6X/chunks
   # Distance target -> phase-space plane (cm). Leave null to read
   # "Constant Z" from the header (required when Z is not stored per particle).
   plane_z_from_target_cm: null
