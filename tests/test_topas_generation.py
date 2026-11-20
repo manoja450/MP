@@ -150,3 +150,18 @@ def test_phsp_axis_mapping():
     assert "d:Ge/PhspPlane/RotZ = -90. deg" in text
     assert 'b:So/Linac/PhaseSpaceInvertYAxis = "True"' in text
     assert "d:Ge/PhspPlane/TransZ = 100. cm" in text
+
+
+def test_recycle_and_all_jobs(tmp_path):
+    cfg = load_machine(MACHINE)
+    vcfg = load_yaml(VALID)
+    vcfg["square_fields_cm"] = [10]
+    vcfg["extra_fields"] = []
+    vcfg["jobs_per_field"] = "all"
+    vcfg["phsp_recycle"] = 3
+    chunks = [{"stem": f"/c/TB_c{k:03d}", "histories": 1000, "z_stored": True} for k in range(7)]
+    runs = make_water_campaign(cfg, vcfg, chunks, tmp_path)
+    assert len(runs) == 7
+    p = params_of(runs[0].read_text())
+    assert p["So/Linac/NumberOfHistoriesInRun"][1] == "3000"
+    assert json.loads((runs[0].parent / "meta.json").read_text())["phsp_recycle"] == 3

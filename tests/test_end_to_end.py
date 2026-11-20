@@ -90,3 +90,19 @@ def test_rtplan_reader_on_synthetic_arc(tmp_path):
     i = 30
     assert b.control_points[4].mlc_pos_mm[i] - b.control_points[0].mlc_pos_mm[i] == pytest.approx(4.0)
     assert "ARC1" in summarize(plan)
+
+
+def test_sparse_outputs_are_flagged_not_crashing(tmp_path):
+    _campaign(tmp_path, fields_cm=(10,))
+    fill_fake_campaign(tmp_path / "work")
+    # make the PDD of jaw10cm mostly empty, like a run with far too few histories
+    import json
+    from tests.helpers import write_topas_csv
+    for meta_p in (tmp_path / "work" / "jaw10cm").glob("job*/meta.json"):
+        meta = json.loads(meta_p.read_text())
+        n = len(meta["scorers"]["PDD"]["positions_cm"])
+        vals = np.zeros(n)
+        vals[::7] = 1e-12
+        write_topas_csv(meta_p.parent / "PDD.csv", (1, 1, n), (0.1, 0.1, 0.2), vals)
+    res = analyse_campaign(tmp_path / "work", tmp_path / "out", None, make_plots=False)
+    assert any(c["check"] == "statistics" and c["result"].startswith("LOW") for c in res["checks"])

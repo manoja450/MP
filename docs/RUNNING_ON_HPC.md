@@ -121,4 +121,10 @@ The script skips jobs that already have `done.flag`, so you can resubmit the sam
 python scripts/analyze_water.py --work /scratch/$USER/mcv/water_6X --ref reference_data/6X --out results/water_6X
 ```
 
-**Statistics target:** a median relative uncertainty of 0.5% or less for the PDD in the high-dose region. The report prints it. Increase `jobs_per_field` (and the number of chunks) until you reach it.
+**Statistics target:** a median relative uncertainty of 0.5–1% for the PDD in the high-dose region. The report prints it.
+
+How much data is needed:
+- The 6 TrueBeam 6 MV files hold about 3×10<sup>8</sup> photon histories. At about 10,000 histories per CPU-second, one pass takes about 9 CPU-hours per field.
+- `jobs_per_field: all` gives one job per chunk, so each field uses all the data.
+- `phsp_recycle: 4` makes each job read its chunk 4 times. This reduces the noise from the water-tank transport, but not the phase-space (latent) variance, so values above about 5 help little.
+- 200,000 histories (the smoke test) leaves most bins empty. The report then shows `statistics: LOW`, which is expected for a smoke test.

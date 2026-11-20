@@ -82,6 +82,11 @@ def analyse_campaign(work_dir: str | Path, out_dir: str | Path, ref_dir: str | P
         # ---- PDD -------------------------------------------------------
         row = {"field": name, "kind": kind, "size_cm": size, "jobs": pdd.n_jobs,
                "histories": pdd.total_histories}
+        filled = float(np.mean(pdd.dose_per_history > 0))
+        if filled < 0.95:
+            checks.append({"field": name, "check": "statistics",
+                           "result": f"LOW - only {100 * filled:.0f}% of PDD bins received dose; "
+                                     "use more histories/jobs before trusting any number"})
         if kind in ("jaw_square", "mlc_square") and pdd.dose_per_history.max() <= 0:
             checks.append({"field": name, "check": "PDD", "result": "FAIL - no dose scored in PDD column"})
         elif kind in ("jaw_square", "mlc_square"):

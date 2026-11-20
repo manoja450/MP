@@ -108,7 +108,7 @@ def pdd_metrics(depth, dose) -> PDDMetrics:
     pdd, dmax, _ = normalise_pdd(depth, dose)
     p10 = float(np.interp(10.0, depth, pdd))
     p20 = float(np.interp(20.0, depth, pdd))
-    return PDDMetrics(dmax, p10, p20, p20 / p10)
+    return PDDMetrics(dmax, p10, p20, p20 / p10 if p10 > 0 else float("nan"))
 
 
 # ---------------------------------------------------------------------------

@@ -19,21 +19,27 @@ extra_fields:
 
 pdd:
   max_depth_cm: 30.0
-  bin_mm: 1.0
-  column_half_width_cm: auto    # auto = min(0.5 cm, 0.15 x field size)
+  bin_mm: 2.0
+  column_half_width_cm: auto    # auto = min(1.0 cm, 0.15 x field size) -> 2x2 cm column for large fields
 
 profiles:
   depths_cm: [1.5, 5.0, 10.0, 20.0]
   small_field_limit_cm: 6.0
   bin_mm_small: 1.0
   bin_mm_large: 2.0
-  thickness_mm: 3.0             # strip thickness perpendicular to the profile
+  thickness_mm: 5.0             # strip thickness perpendicular to the profile
   margin_cm: 5.0                # scored beyond the field edge
 
 output_factor:
   depth_cm: 10.0
-  voxel_mm: 2.0                 # cube edge (automatically shrunk for tiny fields)
+  voxel_mm: 5.0                 # cube edge; shrunk to 0.3 x field size for small fields
 
-jobs_per_field: 20              # each job uses a different phase-space chunk
+# Statistics. One pass through ALL TrueBeam 6MV files is ~3e8 photon histories.
+# jobs_per_field: "all" = one job per phase-space chunk (uses every chunk once per field)
+jobs_per_field: all
+# phsp_recycle: each job reads its chunk this many times. Reduces the phantom part of
+# the noise; the phase-space (latent) variance is NOT reduced, so going beyond ~5
+# gives little. Report the value used (TG-268 table).
+phsp_recycle: 4
 threads_per_job: 1
 rotate_chunks: true

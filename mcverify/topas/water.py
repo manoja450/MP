@@ -85,7 +85,8 @@ def _resolution(vcfg: dict, size_cm: float) -> dict:
     thick_mm = min(p["thickness_mm"], max(1.0, 2.0 * size_cm))   # thin strips for tiny fields
     col_half = vcfg["pdd"].get("column_half_width_cm")
     if col_half in (None, "auto"):
-        col_half = min(0.5, 0.15 * size_cm)
+        # 2x2 cm column for large fields (like a large ion chamber), shrinking for small fields
+        col_half = min(1.0, 0.15 * size_cm)
     return {"bin_mm": bin_mm, "thick_mm": thick_mm, "col_half_cm": float(col_half)}
 
 
@@ -167,7 +168,7 @@ def water_phantom_and_scorers(w: ParamWriter, cfg: dict, vcfg: dict, vf: Validat
 
     w.section("Output-factor voxel (parallel world OFWorld)")
     of = vcfg["output_factor"]
-    h = min(of["voxel_mm"] / 20.0, 0.25 * size)
+    h = min(of["voxel_mm"] / 20.0, 0.15 * size)
     _box(w, "OFVoxel", "WaterTank", "OFWorld", (h, h, h), (1, 1, 1), hlz_tank - float(of["depth_cm"]))
     _scorer(w, "OF", "OFVoxel", out_dir / "OF")
     meta["scorers"]["OF"] = {"file": "OF.csv", "axis": None, "kind": "point",
@@ -192,6 +193,7 @@ def make_water_job(cfg: dict, vcfg: dict, vf: ValidationField, chunk: dict, job_
     run = job_dir / "run.txt"
     w.write(run)
     meta.update({"machine": cfg["name"], "field": asdict(vf), "nominal_size_cm": vf.nominal_size_cm(),
+                 "phsp_recycle": int(vcfg.get("phsp_recycle", 1)),
                  "job_index": job_index, "seed": seed, "histories": src.histories,
                  "phase_space_chunk": chunk["stem"],
                  "field_setting": asdict(fs)})
@@ -207,7 +209,13 @@ def make_water_campaign(cfg: dict, vcfg: dict, chunks: list[dict], work_dir: Pat
     different chunk, so jobs of the same field are statistically independent.
     """
     fields = fields_from_config(vcfg)
-    jobs_per_field = int(vcfg.get("jobs_per_field", 10))
+    recycle = int(vcfg.get("phsp_recycle", 1))
+    if recycle < 1:
+        raise ValueError("phsp_recycle must be >= 1")
+    jobs_per_field = vcfg.get("jobs_per_field", 10)
+    if jobs_per_field in ("all", None):
+        jobs_per_field = len(chunks)
+    jobs_per_field = int(jobs_per_field)
     if jobs_per_field > len(chunks):
         raise ValueError(f"jobs_per_field={jobs_per_field} but only {len(chunks)} phase-space chunks: "
                          "split the phase space into more chunks or reduce jobs_per_field")
@@ -216,5 +224,8 @@ def make_water_campaign(cfg: dict, vcfg: dict, chunks: list[dict], work_dir: Pat
         for j in range(jobs_per_field):
             chunk = chunks[(fi * jobs_per_field + j) % len(chunks)] if vcfg.get("rotate_chunks", True) else chunks[j]
             seed = base_seed + 1000 * fi + j
-            runs.append(make_water_job(cfg, vcfg, vf, chunk, j, seed, Path(work_dir) / vf.name / f"job{j:03d}"))
+            # recycling: TOPAS wraps to the start of the chunk at end of file, so
+            # histories = recycle x chunk histories reads the chunk `recycle` times
+            runs.append(make_water_job(cfg, vcfg, vf, chunk, j, seed, Path(work_dir) / vf.name / f"job{j:03d}",
+                                       histories=int(chunk["histories"]) * recycle))
     return runs
