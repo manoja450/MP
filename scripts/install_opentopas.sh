@@ -11,6 +11,13 @@
 # Before running: load a compiler with C++17 support and CMake >= 3.16, e.g.
 #   module load gcc cmake        (names differ per cluster: `module avail gcc cmake`)
 # Optional: APPS=/some/other/dir JOBS=8 bash scripts/install_opentopas.sh build
+#
+# Using a Geant4 that is ALREADY INSTALLED on the cluster:
+#   make `geant4-config` available (module load / source .../bin/geant4.sh), then
+#   USE_SYSTEM_G4=1 bash scripts/install_opentopas.sh download
+#   USE_SYSTEM_G4=1 bash scripts/install_opentopas.sh build
+# The OpenTOPAS release matching that Geant4 version is chosen automatically and
+# Geant4 itself is neither downloaded nor built.
 set -euo pipefail
 
 APPS=${APPS:-$HOME/Applications}
@@ -27,8 +34,30 @@ G4URRPT.1.1 G4PII.1.3 G4RealSurface.2.2 G4SAIDDATA.2.0 G4TENDL.1.4 LEND_GNDS2.0_
 stage=${1:-}
 say() { echo -e "\n=== $* ==="; }
 
+USE_SYSTEM_G4=${USE_SYSTEM_G4:-0}
+if [ "$USE_SYSTEM_G4" = 1 ]; then
+  command -v geant4-config >/dev/null || { echo "USE_SYSTEM_G4=1 but geant4-config is not on PATH (load the Geant4 module first)"; exit 1; }
+  SYS_G4_VERSION=$(geant4-config --version)
+  SYS_G4_PREFIX=$(geant4-config --prefix)
+  case "$SYS_G4_VERSION" in
+    11.4.*) TOPASV=v4.3.1 ;;
+    11.3.*) TOPASV=v4.2.3 ;;
+    11.1.*) TOPASV=v4.1.1 ;;
+    *) echo "Cluster Geant4 $SYS_G4_VERSION has no matching OpenTOPAS release (need 11.1, 11.3 or 11.4)."
+       echo "Run without USE_SYSTEM_G4 to build Geant4 $G4V yourself."; exit 1 ;;
+  esac
+  # data directory = parent folder of the installed data sets
+  SYS_G4_DATA=$(geant4-config --datasets 2>/dev/null | awk '$1=="G4EMLOW"{print $3}' | xargs -r dirname)
+  echo "Using cluster Geant4 $SYS_G4_VERSION at $SYS_G4_PREFIX -> OpenTOPAS $TOPASV"
+  echo "Geant4 data directory: ${SYS_G4_DATA:-NOT FOUND}"
+fi
+
 download() {
-  mkdir -p "$G4/G4DATA" "$TOPAS"
+  mkdir -p "$TOPAS"
+  if [ "$USE_SYSTEM_G4" = 1 ]; then
+    download_topas; return
+  fi
+  mkdir -p "$G4/G4DATA"
   say "Geant4 $G4V source"
   cd "$G4"
   [ -d geant4-v$G4V ] || { wget -nc https://gitlab.cern.ch/geant4/geant4/-/archive/v$G4V/geant4-v$G4V.tar.gz \
@@ -39,6 +68,10 @@ download() {
     wget -nc -q --show-progress https://cern.ch/geant4-data/datasets/$d.tar.gz
     tar -zxf $d.tar.gz
   done
+  download_topas
+}
+
+download_topas() {
   say "OpenTOPAS $TOPASV source"
   cd "$TOPAS"
   [ -d OpenTOPAS ] || git clone https://github.com/OpenTOPAS/OpenTOPAS.git
@@ -49,15 +82,23 @@ download() {
 build() {
   command -v cmake >/dev/null || { echo "cmake not found: module load cmake"; exit 1; }
   echo "cmake: $(cmake --version | head -1)"; echo "c++:   $(c++ --version | head -1)"
-  [ -d "$G4/geant4-v$G4V" ] || { echo "Run the download stage first"; exit 1; }
-
-  say "Build Geant4 (30-90 min)"
-  cd "$G4"; rm -rf geant4-build geant4-install; mkdir geant4-build geant4-install; cd geant4-build
-  cmake ../geant4-v$G4V -DCMAKE_INSTALL_PREFIX=../geant4-install \
-        -DGEANT4_INSTALL_DATA=OFF -DGEANT4_BUILD_MULTITHREADED=ON \
-        -DGEANT4_USE_QT=OFF -DGEANT4_USE_OPENGL_X11=OFF -DGEANT4_USE_SYSTEM_EXPAT=OFF \
-        -DCMAKE_BUILD_TYPE=Release
-  make -j"$JOBS" install
+  [ -d "$TOPAS/OpenTOPAS" ] || { echo "Run the download stage first"; exit 1; }
+  if [ "$USE_SYSTEM_G4" = 1 ]; then
+    G4PREFIX=$SYS_G4_PREFIX
+    G4DATA=$SYS_G4_DATA
+    [ -n "$G4DATA" ] && [ -d "$G4DATA" ] || { echo "Cluster Geant4 data sets not found; ask HPC support where they are"; exit 1; }
+  else
+    [ -d "$G4/geant4-v$G4V" ] || { echo "Run the download stage first"; exit 1; }
+    say "Build Geant4 (30-90 min)"
+    cd "$G4"; rm -rf geant4-build geant4-install; mkdir geant4-build geant4-install; cd geant4-build
+    cmake ../geant4-v$G4V -DCMAKE_INSTALL_PREFIX=../geant4-install \
+          -DGEANT4_INSTALL_DATA=OFF -DGEANT4_BUILD_MULTITHREADED=ON \
+          -DGEANT4_USE_QT=OFF -DGEANT4_USE_OPENGL_X11=OFF -DGEANT4_USE_SYSTEM_EXPAT=OFF \
+          -DCMAKE_BUILD_TYPE=Release
+    make -j"$JOBS" install
+    G4PREFIX=$G4/geant4-install
+    G4DATA=$G4/G4DATA
+  fi
 
   say "Build GDCM 2.6.8 (bundled with OpenTOPAS)"
   mkdir -p "$GDCM"; cd "$GDCM"
@@ -69,18 +110,18 @@ build() {
 
   say "Build OpenTOPAS $TOPASV"
   cd "$TOPAS"; rm -rf OpenTOPAS-build OpenTOPAS-install; mkdir OpenTOPAS-build OpenTOPAS-install; cd OpenTOPAS-build
-  export Geant4_DIR=$G4/geant4-install
+  export Geant4_DIR=$G4PREFIX
   export GDCM_DIR=$GDCM/gdcm-install
   cmake ../OpenTOPAS -DCMAKE_INSTALL_PREFIX=../OpenTOPAS-install -DCMAKE_BUILD_TYPE=Release
   make -j"$JOBS" install
 
   say "Environment file: $APPS/topas_env.sh"
-  G4LIB=$(ls -d "$G4/geant4-install"/lib64 "$G4/geant4-install"/lib 2>/dev/null | head -1)
+  G4LIB=$(ls -d "$G4PREFIX"/lib64 "$G4PREFIX"/lib 2>/dev/null | head -1)
   TLIB=$(ls -d "$TOPAS/OpenTOPAS-install"/lib64 "$TOPAS/OpenTOPAS-install"/lib 2>/dev/null | head -1)
   GLIB=$(ls -d "$GDCM/gdcm-install"/lib64 "$GDCM/gdcm-install"/lib 2>/dev/null | head -1)
   cat > "$APPS/topas_env.sh" <<EOF
 # source this file (also in SLURM scripts) to use OpenTOPAS
-export TOPAS_G4_DATA_DIR=$G4/G4DATA
+export TOPAS_G4_DATA_DIR=$G4DATA
 export LD_LIBRARY_PATH=$TLIB:$G4LIB:$GLIB:\${LD_LIBRARY_PATH:-}
 export PATH=$TOPAS/OpenTOPAS-install/bin:\$PATH
 EOF
