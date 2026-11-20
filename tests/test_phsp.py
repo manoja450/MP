@@ -100,3 +100,12 @@ def test_sample_particles_with_z(tmp_path):
     assert record_layout(read_header(stem)) == ["X", "Y", "Z", "U", "V"]
     s = sample_particles(stem)
     assert np.allclose(s["Z"], 26.7) and np.allclose(s["energy"], 2.0)
+
+
+def test_manifest_with_relative_paths_is_made_absolute(tmp_path, monkeypatch):
+    write_fake_phsp(tmp_path / "TB", n=100)
+    monkeypatch.chdir(tmp_path)
+    split_phase_space("TB", "rel_chunks", n_chunks=2)       # relative paths, as typed by a user
+    monkeypatch.chdir("/")
+    chunks = load_chunk_manifests(tmp_path / "rel_chunks")
+    assert all(c["stem"].startswith(str(tmp_path)) for c in chunks)

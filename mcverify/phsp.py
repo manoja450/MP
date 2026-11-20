@@ -230,7 +230,7 @@ def split_phase_space(stem: str | os.PathLike, out_dir: str | os.PathLike, n_chu
     if n_chunks < 1 or n_chunks > n_total:
         raise ValueError("n_chunks must be between 1 and the number of records")
     header_text = find_header(stem).read_text(errors="replace")
-    out_dir = Path(out_dir)
+    out_dir = Path(out_dir).resolve()          # absolute: jobs run in other directories
     out_dir.mkdir(parents=True, exist_ok=True)
     mm = np.memmap(data, dtype=np.uint8, mode="r", shape=(n_total, rl))
     edges = np.linspace(0, n_total, n_chunks + 1).astype(np.int64)
@@ -266,12 +266,18 @@ def load_chunk_manifests(chunk_dir: str | os.PathLike) -> list[dict]:
     """Read every ``*_chunks.json`` in ``chunk_dir`` and return all chunks (sorted)."""
     chunks = []
     meta = None
-    for p in sorted(Path(chunk_dir).glob("*_chunks.json")):
+    chunk_dir = Path(chunk_dir).resolve()
+    for p in sorted(chunk_dir.glob("*_chunks.json")):
         d = json.loads(p.read_text())
         meta = meta or d
         if (d["z_stored"], d["z_constant_cm"]) != (meta["z_stored"], meta["z_constant_cm"]):
             raise ValueError(f"{p}: phase-space plane differs from other files")
         for ch in d["chunks"]:
+            # always point at the chunk next to this manifest, as an absolute path
+            # (older manifests may hold relative paths, which break inside job dirs)
+            ch["stem"] = str(chunk_dir / Path(ch["stem"]).name)
+            if not Path(ch["stem"] + ".header").exists():
+                raise FileNotFoundError(f"chunk header missing: {ch['stem']}.header")
             ch["z_stored"] = d["z_stored"]
             ch["z_constant_cm"] = d["z_constant_cm"]
             chunks.append(ch)
