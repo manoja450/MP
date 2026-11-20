@@ -1,0 +1,80 @@
+# Machine model: Varian TrueBeam 6X with Millennium-120 MLC
+# ---------------------------------------------------------------------------
+# !! Values marked VERIFY are approximate literature-style numbers used to get
+# !! started. Replace them with the geometry from Varian's Monte Carlo data
+# !! package (the document that comes with the phase-space files) before
+# !! producing results for the paper. Record every final value in
+# !! docs/TG268_reporting_table.md.
+# All distances along the beam axis are measured from the X-ray target.
+
+name: TrueBeam_6X_M120
+beam: 6X                 # 6X or 6FFF (only used for labels / reference data)
+sad_cm: 100.0
+
+phase_space:
+  # Directory containing phase-space CHUNKS made by scripts/split_phsp.py.
+  # Every job uses a different chunk, so jobs are statistically independent.
+  chunk_dir: /scratch/YOUR_USER/phsp/TrueBeam_6X/chunks
+  # Distance target -> phase-space plane (cm). Leave null to read
+  # "Constant Z" from the header (required when Z is not stored per particle).
+  plane_z_from_target_cm: null
+  # Varian IAEA files have no new-history flags; OpenTOPAS reads them with
+  # these options (see OpenTOPAS examples/PhaseSpace/ReadVarian.txt).
+  limited_assume_photon_is_new_history: true
+  limited_assume_first_particle_is_new_history: true
+  include_empty_histories: false
+  ignore_unsupported_particles: true
+  # IAEA files: +z points downstream (away from target). TOPAS IEC coordinates
+  # have +z pointing towards the source, so z is inverted.
+  invert_z_axis: true
+  invert_x_axis: false   # VERIFY with the asymmetric-jaw test field (docs/ROADMAP.md, Step 3)
+  invert_y_axis: false
+
+physics:
+  modules: [g4em-standard_opt4]
+  production_cut_mm: 0.1        # test 0.05 mm for small fields
+  world_material: G4_AIR
+
+jaws:
+  # Varian: Y jaws are the upper pair, X jaws the lower pair.
+  upper:
+    travel_axis: Y
+    source_to_upstream_cm: 28.0   # VERIFY
+    thickness_cm: 7.8             # VERIFY
+    width_cm: 20.0                # physical size along travel
+    length_cm: 20.0               # physical size perpendicular to travel
+    material: G4_W
+  lower:
+    travel_axis: X
+    source_to_upstream_cm: 36.7   # VERIFY
+    thickness_cm: 7.8             # VERIFY
+    width_cm: 20.0
+    length_cm: 20.0
+    material: G4_W
+
+mlc:
+  model: millennium120            # millennium120 or hd120
+  travel_axis: X                  # leaves move along IEC X
+  source_to_upstream_cm: 46.5     # VERIFY
+  thickness_cm: 6.9               # VERIFY (leaf height along beam)
+  length_cm: 16.0                 # VERIFY (physical leaf length)
+  max_leaf_open_cm: 20.0
+  # --- tuning parameters (Step 4: match DLG and transmission) ---
+  # OpenTOPAS TsDivergingMLC has focused leaf ends (no rounded tips, no
+  # tongue-and-groove). We therefore use effective parameters:
+  #   leaf_end_offset_mm: added to every leaf opening (each side), mimics DLG/2
+  #   density: tuned to match measured MLC transmission
+  leaf_end_offset_mm: 0.0
+  material:
+    name: MLCTungstenAlloy
+    components: [Tungsten, Nickel, Iron]
+    fractions: [0.95, 0.035, 0.015]
+    density_g_cm3: 18.0           # tune for transmission
+
+calibration:
+  # Reference condition used to convert dose/history to Gy/MU (Step 6)
+  reference_field_cm: 10.0
+  reference_ssd_cm: 100.0
+  reference_depth_cm: 1.5         # dmax for 6X (use 10 cm if your clinic calibrates there)
+  gy_per_mu_at_reference: 0.01    # 1 cGy/MU
+  gy_per_history_at_reference: null   # filled in after the Step-6 run

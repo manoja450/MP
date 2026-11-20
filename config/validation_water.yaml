@@ -1,0 +1,39 @@
+# Water-tank validation campaign (Paper 1, Aim 1 -- ROADMAP Steps 2-5)
+ssd_cm: 100.0
+tank:
+  half_xy_cm: 25.0        # 50 x 50 cm tank
+  depth_cm: 40.0
+
+# Jaw-defined square fields (MLC retracted)
+square_fields_cm: [1, 2, 3, 4, 6, 10, 20, 30]
+
+# Extra fields for MLC / orientation checks (Steps 3-4)
+extra_fields:
+  - {name: mlc10cm, kind: mlc_square, size_cm: 10, jaw_margin_cm: 1.0}
+  - {name: mlc3cm,  kind: mlc_square, size_cm: 3,  jaw_margin_cm: 1.0}
+  - {name: mlcClosed10cm, kind: mlc_closed, size_cm: 10, closed_at_cm: -6.0}   # MLC transmission
+  # Orientation test: only the +Y half is open. The dose must appear at +Y in the
+  # inline profile; if it appears at -Y, flip invert_y_axis / the jaw rotation.
+  - {name: asymY, kind: asym_jaw, x1: -5, x2: 5, y1: 0, y2: 5}
+  - {name: asymX, kind: asym_jaw, x1: 0, x2: 5, y1: -5, y2: 5}
+
+pdd:
+  max_depth_cm: 30.0
+  bin_mm: 1.0
+  column_half_width_cm: auto    # auto = min(0.5 cm, 0.15 x field size)
+
+profiles:
+  depths_cm: [1.5, 5.0, 10.0, 20.0]
+  small_field_limit_cm: 6.0
+  bin_mm_small: 1.0
+  bin_mm_large: 2.0
+  thickness_mm: 3.0             # strip thickness perpendicular to the profile
+  margin_cm: 5.0                # scored beyond the field edge
+
+output_factor:
+  depth_cm: 10.0
+  voxel_mm: 2.0                 # cube edge (automatically shrunk for tiny fields)
+
+jobs_per_field: 20              # each job uses a different phase-space chunk
+threads_per_job: 1
+rotate_chunks: true
