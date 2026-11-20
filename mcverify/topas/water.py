@@ -92,7 +92,8 @@ def _resolution(vcfg: dict, size_cm: float) -> dict:
 def _box(w: ParamWriter, name: str, parent: str, world: str, hl: tuple, bins: tuple, trans_z: float) -> None:
     w.s(f"Ge/{name}/Type", "TsBox")
     w.s(f"Ge/{name}/Parent", parent)
-    w.s(f"Ge/{name}/Material", "G4_WATER")
+    # NO material: a parallel world with material switches on layered mass
+    # geometry in OpenTOPAS. Dose uses the mass-world material (the water tank).
     w.b(f"Ge/{name}/IsParallel", True)
     w.s(f"Ge/{name}/ParallelWorldName", world)
     for ax, v in zip(("HLX", "HLY", "HLZ"), hl):

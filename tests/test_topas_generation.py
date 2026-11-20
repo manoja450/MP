@@ -114,6 +114,9 @@ def test_campaign_generation(tmp_path):
         # each scorer's output file lives in the job directory
         for name, sc in meta["scorers"].items():
             assert p[f"Sc/{name}/OutputFile"][1].strip('"') == str(r.parent / name)
+        # parallel scoring components must not have a material (OpenTOPAS aborts otherwise)
+        parallel = {k.split("/")[1] for k, v in p.items() if k.endswith("/IsParallel") and "True" in v[1]}
+        assert parallel and not any(f"Ge/{c}/Material" in p for c in parallel)
         # PDD bins: deepest first (TOPAS bin 0 is the most negative z)
         assert meta["scorers"]["PDD"]["positions_cm"][0] > meta["scorers"]["PDD"]["positions_cm"][-1]
     # jobs of one field never share a phase-space chunk
