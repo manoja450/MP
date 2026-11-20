@@ -6,6 +6,7 @@
 # Usage (two stages, because compute nodes often have no internet):
 #   bash scripts/install_opentopas.sh download   # on the LOGIN node (internet)
 #   bash scripts/install_opentopas.sh build      # on the login node or in a batch job
+#   bash scripts/install_opentopas.sh envfile    # (re)write ~/Applications/topas_env.sh only
 #   bash scripts/install_opentopas.sh test       # quick check that topas runs
 #
 # Before running: load a compiler with C++17 support and CMake >= 3.16, e.g.
@@ -79,6 +80,10 @@ download_topas() {
   say "Download stage finished. Now run:  bash $0 build"
 }
 
+libdir() {  # print <prefix>/lib64 if it exists, else <prefix>/lib (never fails)
+  if [ -d "$1/lib64" ]; then echo "$1/lib64"; else echo "$1/lib"; fi
+}
+
 build() {
   command -v cmake >/dev/null || { echo "cmake not found: module load cmake"; exit 1; }
   echo "cmake: $(cmake --version | head -1)"; echo "c++:   $(c++ --version | head -1)"
@@ -114,17 +119,27 @@ build() {
   export GDCM_DIR=$GDCM/gdcm-install
   cmake ../OpenTOPAS -DCMAKE_INSTALL_PREFIX=../OpenTOPAS-install -DCMAKE_BUILD_TYPE=Release
   make -j"$JOBS" install
+  write_env
+}
 
+write_env() {
+  # G4PREFIX/G4DATA come from build(); when run on its own ("envfile"), work them out
+  if [ -z "${G4PREFIX:-}" ]; then
+    if [ "$USE_SYSTEM_G4" = 1 ]; then G4PREFIX=$SYS_G4_PREFIX; G4DATA=$SYS_G4_DATA
+    else G4PREFIX=$G4/geant4-install; G4DATA=$G4/G4DATA; fi
+  fi
+  [ -x "$TOPAS/OpenTOPAS-install/bin/topas" ] || { echo "topas executable not found: build first"; exit 1; }
   say "Environment file: $APPS/topas_env.sh"
-  G4LIB=$(ls -d "$G4PREFIX"/lib64 "$G4PREFIX"/lib 2>/dev/null | head -1)
-  TLIB=$(ls -d "$TOPAS/OpenTOPAS-install"/lib64 "$TOPAS/OpenTOPAS-install"/lib 2>/dev/null | head -1)
-  GLIB=$(ls -d "$GDCM/gdcm-install"/lib64 "$GDCM/gdcm-install"/lib 2>/dev/null | head -1)
+  G4LIB=$(libdir "$G4PREFIX")
+  TLIB=$(libdir "$TOPAS/OpenTOPAS-install")
+  GLIB=$(libdir "$GDCM/gdcm-install")
   cat > "$APPS/topas_env.sh" <<EOF
 # source this file (also in SLURM scripts) to use OpenTOPAS
 export TOPAS_G4_DATA_DIR=$G4DATA
 export LD_LIBRARY_PATH=$TLIB:$G4LIB:$GLIB:\${LD_LIBRARY_PATH:-}
 export PATH=$TOPAS/OpenTOPAS-install/bin:\$PATH
 EOF
+  cat "$APPS/topas_env.sh"
   say "Build finished. Next:  bash $0 test"
 }
 
@@ -173,6 +188,7 @@ EOF
 case "$stage" in
   download) download ;;
   build) build ;;
+  envfile) write_env ;;
   test) test_topas ;;
-  *) echo "usage: bash $0 {download|build|test}"; exit 1 ;;
+  *) echo "usage: bash $0 {download|build|envfile|test}"; exit 1 ;;
 esac
