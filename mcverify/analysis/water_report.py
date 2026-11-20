@@ -82,7 +82,9 @@ def analyse_campaign(work_dir: str | Path, out_dir: str | Path, ref_dir: str | P
         # ---- PDD -------------------------------------------------------
         row = {"field": name, "kind": kind, "size_cm": size, "jobs": pdd.n_jobs,
                "histories": pdd.total_histories}
-        if kind in ("jaw_square", "mlc_square"):
+        if kind in ("jaw_square", "mlc_square") and pdd.dose_per_history.max() <= 0:
+            checks.append({"field": name, "check": "PDD", "result": "FAIL - no dose scored in PDD column"})
+        elif kind in ("jaw_square", "mlc_square"):
             m = pdd_metrics(pdd.positions_cm, pdd.dose_per_history)
             pct, dmax, dpk = normalise_pdd(pdd.positions_cm, pdd.dose_per_history)
             hi = pdd.dose_per_history > 0.5 * dpk
@@ -111,7 +113,13 @@ def analyse_campaign(work_dir: str | Path, out_dir: str | Path, ref_dir: str | P
             depth = float(c.meta["scorer"]["depth_cm"])
             prow = {"field": name, "axis": axis, "depth_cm": depth}
             if kind in ("jaw_square", "mlc_square"):
-                pm = profile_metrics(c.positions_cm, c.dose_per_history)
+                try:
+                    pm = profile_metrics(c.positions_cm, c.dose_per_history)
+                except ValueError as e:
+                    checks.append({"field": name, "check": f"profile {sname}", "result": f"FAIL - {e}",
+                                   "value": f"total dose {c.dose_per_history.sum():.3e} Gy/history"})
+                    prof_rows.append(prow)
+                    continue
                 prow.update({"field_size_cm": pm.field_size_cm, "centre_cm": pm.centre_cm,
                              "penumbra_left_cm": pm.penumbra_left_cm, "penumbra_right_cm": pm.penumbra_right_cm,
                              "flatness_pct": pm.flatness_pct, "symmetry_pct": pm.symmetry_pct})
