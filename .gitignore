@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.venv/
+# simulation inputs/outputs (large, regenerate them)
+*.phsp
+*.IAEAphsp
+*.header
+*.IAEAheader
+*.bin
+*.binheader
+results/
+work/
+slurm-*.out
+# reference data may be licensed: commit only what you may share
+reference_data/*/
