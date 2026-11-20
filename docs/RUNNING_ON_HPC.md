@@ -2,17 +2,37 @@
 
 ## 1. Install OpenTOPAS
 
-Follow the official quick-start guide for Linux:
-<https://github.com/OpenTOPAS/OpenTOPAS> (file `OpenTOPAS_quickStart_Debian.md`).
+`scripts/install_opentopas.sh` follows the official guide (`OpenTOPAS_quickStart_Debian.md`, OpenTOPAS **v4.3.1** with **Geant4 11.4.3**), adapted for a cluster: no `sudo`, no graphics (Qt), and everything installed under `$HOME/Applications`.
 
-At the time of writing, OpenTOPAS **v4.3.1** is built against **Geant4 11.4.3**. Use exactly the Geant4 version that the guide names.
+Load a C++17 compiler and CMake 3.16 or newer. Module names differ per cluster; `module avail gcc` and `module avail cmake` list what exists.
 
-- Many clusters have no root access. Build everything under `$HOME/Applications`, as the guide does.
-- Load a recent GCC (C++17) and CMake ≥ 3.16 through `module load`.
-- Download the Geant4 data sets once to a shared location, and point TOPAS at them as the guide explains.
-- Check the installation by running one of the bundled examples, such as `examples/Basic/OneBox.txt`, without graphics.
+```bash
+module load gcc cmake
+```
 
-Then edit the "environment" block in `slurm/run_topas_array.sbatch`: modules, `PATH` and the Geant4 data directory.
+Download the sources and Geant4 data, about 5 GB. Run this on the **login node**, which has internet:
+
+```bash
+bash scripts/install_opentopas.sh download
+```
+
+Build, which takes 1–2 hours. You can run it on the login node, but many clusters prefer a short batch or interactive job for this:
+
+```bash
+JOBS=8 bash scripts/install_opentopas.sh build
+```
+
+Test with a 10,000-photon run in water:
+
+```bash
+bash scripts/install_opentopas.sh test
+```
+
+The build writes `$HOME/Applications/topas_env.sh`. `slurm/run_topas_array.sbatch` sources this file automatically. To use `topas` in your own terminal:
+
+```bash
+source $HOME/Applications/topas_env.sh
+```
 
 ## 2. Python environment
 

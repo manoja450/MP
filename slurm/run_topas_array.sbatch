@@ -16,9 +16,8 @@ RUN_FILE=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$JOBS_FILE")
 [ -n "$RUN_FILE" ] || { echo "no line ${SLURM_ARRAY_TASK_ID} in $JOBS_FILE"; exit 1; }
 
 # --- environment: edit for your cluster ---------------------------------
-# module load gcc cmake
-# export PATH=$HOME/Applications/TOPAS/OpenTOPAS-install/bin:$PATH
-# export TOPAS_G4_DATA_DIR=$HOME/Applications/GEANT4/G4DATA
+# module load gcc          # same compiler modules you used to build OpenTOPAS
+source "${TOPAS_ENV:-$HOME/Applications/topas_env.sh}"   # written by scripts/install_opentopas.sh
 # ------------------------------------------------------------------------
 
 JOB_DIR=$(dirname "$RUN_FILE")
