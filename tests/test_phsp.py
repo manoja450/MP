@@ -70,3 +70,33 @@ def test_count_records_types():
     rec[:, 1:5] = e.view(np.uint8).reshape(4, 4)
     c = count_records(rec)
     assert (c["photons"], c["electrons"], c["positrons"], c["new_history_flags"]) == (2, 1, 1, 1)
+
+
+def test_sample_particles_layout(tmp_path):
+    from mcverify.phsp import describe_sample, record_layout, sample_particles
+    write_fake_phsp(tmp_path / "TB", n=500)
+    info = read_header(tmp_path / "TB")
+    assert record_layout(info) == ["X", "Y", "U", "V", "Weight"]
+    s = sample_particles(tmp_path / "TB", n=100)
+    assert s["energy"].size == 100 and "Z" not in s
+    assert (s["energy"] > 0).all()
+    assert "photons" in describe_sample(s)
+
+
+def test_sample_particles_with_z(tmp_path):
+    from mcverify.phsp import record_layout, sample_particles
+    stem = tmp_path / "TBZ"
+    n, rl = 50, 25
+    rec = np.zeros((n, rl), dtype=np.uint8)
+    rec[:, 0] = np.full(n, 1, dtype=np.int8).view(np.uint8)
+    fl = np.column_stack([np.full(n, 2.0), np.zeros(n), np.zeros(n), np.full(n, 26.7),
+                          np.zeros(n), np.zeros(n)]).astype("<f4")
+    rec[:, 1:] = fl.view(np.uint8).reshape(n, 24)
+    (tmp_path / "TBZ.IAEAphsp").write_bytes(rec.tobytes())
+    hdr = ("$RECORD_CONTENTS:\n 1 // X is stored ?\n 1 // Y is stored ?\n 1 // Z is stored ?\n"
+           " 1 // U is stored ?\n 1 // V is stored ?\n 1 // W is stored ?\n 0 // Weight is stored ?\n"
+           " 0 // Extra floats stored ?\n 0 // Extra longs stored ?\n$RECORD_LENGTH:\n 25\n$PARTICLES:\n 50\n")
+    (tmp_path / "TBZ.IAEAheader").write_text(hdr)
+    assert record_layout(read_header(stem)) == ["X", "Y", "Z", "U", "V"]
+    s = sample_particles(stem)
+    assert np.allclose(s["Z"], 26.7) and np.allclose(s["energy"], 2.0)

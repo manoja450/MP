@@ -278,3 +278,75 @@ def load_chunk_manifests(chunk_dir: str | os.PathLike) -> list[dict]:
     if not chunks:
         raise FileNotFoundError(f"no *_chunks.json manifests in {chunk_dir}; run scripts/split_phsp.py first")
     return chunks
+
+
+# ---------------------------------------------------------------------------
+# Sampling particles (to check coordinates before trusting a phase space)
+# ---------------------------------------------------------------------------
+_STORED_ORDER = ["X", "Y", "Z", "U", "V", "W", "Weight"]
+
+
+def record_layout(info: PhspInfo) -> list[str]:
+    """Names of the float32 fields after the type byte and energy, in file order."""
+    stored = {k: True for k in _STORED_ORDER}
+    stored["W"] = False                       # W is normally derived from U, V
+    n_extra_f = n_extra_l = 0
+    for line in info.sections.get("RECORD_CONTENTS", []):
+        val, com = _value_and_comment(line)
+        low = com.lower()
+        for k in _STORED_ORDER:
+            if k != "W" and low.startswith(f"{k.lower()} is stored"):
+                stored[k] = val.startswith("1")   # W is never in the record (as OpenTOPAS reads it)
+        if low.startswith("extra floats stored"):
+            n_extra_f = int(float(val))
+        if low.startswith("extra longs stored"):
+            n_extra_l = int(float(val))
+    fields = [k for k in _STORED_ORDER if stored[k]]
+    fields += [f"extra_float_{i}" for i in range(n_extra_f)]
+    fields += [f"extra_long_{i}" for i in range(n_extra_l)]
+    return fields
+
+
+def sample_particles(stem, n: int = 1_000_000) -> dict[str, np.ndarray]:
+    """Read the first ``n`` particles into a dict of arrays (cm, MeV)."""
+    info = read_header(stem)
+    fields = record_layout(info)
+    expected = 1 + 4 + 4 * len(fields)
+    if expected != info.record_length:
+        raise ValueError(f"layout {fields} gives {expected} bytes but header says {info.record_length}")
+    data = _data_file(stem)
+    n = min(n, data.stat().st_size // info.record_length)
+    raw = np.fromfile(data, dtype=np.uint8, count=n * info.record_length).reshape(n, info.record_length)
+    ptype = raw[:, 0].view(np.int8).astype(int)
+    floats = raw[:, 1:].copy().view("<f4").reshape(n, -1)
+    out = {"type": np.abs(ptype), "cosz_negative": ptype < 0,
+           "energy": np.abs(floats[:, 0]), "new_history": floats[:, 0] < 0}
+    for i, f in enumerate(fields):
+        out[f] = floats[:, 1 + i]
+    return out
+
+
+def describe_sample(s: dict) -> str:
+    def rng(a):
+        return f"min {a.min():9.3f}  mean {a.mean():9.3f}  max {a.max():9.3f}"
+    lines = [f"particles sampled      : {s['energy'].size}"]
+    for k, name in ((1, "photons"), (2, "electrons"), (3, "positrons")):
+        lines.append(f"  {name:9s}            : {np.mean(s['type'] == k) * 100:6.2f} %")
+    lines.append(f"energy (MeV)           : {rng(s['energy'])}")
+    for k in ("X", "Y", "Z", "U", "V"):
+        if k in s:
+            lines.append(f"{k:22s} : {rng(s[k])}")
+    if "Z" in s:
+        z = s["Z"]
+        lines.append(f"distinct Z values      : {np.unique(np.round(z, 4)).size} (first: {np.unique(np.round(z, 4))[:5]})")
+    lines.append(f"sign(cos z) negative   : {np.mean(s['cosz_negative']) * 100:6.2f} % of particles")
+    lines.append(f"new-history flags      : {np.mean(s['new_history']) * 100:6.2f} %")
+    if "U" in s and "V" in s:
+        r = np.hypot(s["X"], s["Y"]) if "X" in s else None
+        w = np.sqrt(np.clip(1 - s["U"] ** 2 - s["V"] ** 2, 0, 1))
+        if r is not None:
+            sel = r > 5
+            radial = (s["X"][sel] * s["U"][sel] + s["Y"][sel] * s["V"][sel]) / r[sel]
+            lines.append(f"mean radial direction  : {radial.mean():+.4f} (positive = beam diverging outward)")
+        lines.append(f"mean |cos z|           : {w.mean():.4f}")
+    return "\n".join(lines)
